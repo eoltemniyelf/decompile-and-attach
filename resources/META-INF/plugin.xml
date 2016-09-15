@@ -1,66 +1,75 @@
 <idea-plugin version="2">
-  <id>io.gulp.intellij</id>
-  <name>Decompile and Attach</name>
-  <version>1.5</version>
-  <vendor email="bduisenov@gmail.com" url="https://github.com/bduisenov">Babur</vendor>
+    <id>io.gulp.intellij</id>
+    <name>Decompile and Attach</name>
+    <version>1.6</version>
+    <vendor email="bduisenov@gmail.com" url="https://github.com/bduisenov">Babur</vendor>
+    <vendor email="eoltemniyelf@gmail.com" url="https://github.com/eoltemniyelf">Evgeny</vendor>
 
-  <description><![CDATA[
+    <description>
+        <![CDATA[
       <a href="https://github.com/bduisenov/decompile-and-attach">GitHub</a> |
       <a href="https://github.com/bduisenov/decompile-and-attach/issues">Issues</a> |
       <br/>
-      decompiles jar package using Intellij's build in Fernflower decompiler and attaches decompiled sources to project.
+      Decompiles JAR package using Intellij's build in Fernflower decompiler and attaches decompiled sources to project.
       the purpose is to have a possibility for searching through compiled code (Search Scope: Project and Libraries).
       <br/>
-      to use it, just right click on jar file and select "Decompile And Attach" action
+      to use it, just right click on JAR file and select "Decompile And Attach" action
     ]]></description>
 
-  <change-notes><![CDATA[
-      1.5 fixes and features:
+    <change-notes>
+        <![CDATA[
+      1.6 Fixes and features:
       <ul>
-        <li>jar decompilation continues even if decompilation for some classes failed</li>
-        <li>added multiple jars decompilation</li>
-        <li>added cancellation for process</li>
-        <li>added form for selecting folder where sources would be stored</li>
-        <li>switched from BYTECODE_SOURCE_MAPPING to USE_DEBUG_LINE_NUMBERS for decompiler. fix see github issue #6</li>
+        <li>Now using default IDEA decompilator instead of custom plugin</li>
+        <li>Fixed NPE on JARRoot variable</li>
+        <li>Switched from 'decompiler.use.line.table' to 'decompiler.dump.original.lines'</li>
+      </ul>
+      1.5 Fixes and features:
+      <ul>
+        <li>JAR decompilation continues even if decompilation for some classes failed</li>
+        <li>Added multiple JARs decompilation</li>
+        <li>Added cancellation for process</li>
+        <li>Added form for selecting folder where sources would be stored</li>
+        <li>Switched from BYTECODE_SOURCE_MAPPING to USE_DEBUG_LINE_NUMBERS for decompiler. fix see github issue #6</li>
       </ul>
       <br/>
-      1.4 decompiled sources are attached to source jar lib instead of creating a new lib
+      1.4 Decompiled sources are attached to source JAR lib instead of creating a new lib
       <br/>
-      1.3 added functionality for attaching decompiled sources to owner module of a jar
+      1.3 Added functionality for attaching decompiled sources to owner module of a JAR
       <br/>
-      1.2 fixed jar archive generation.
+      1.2 Fixed JAR generation.
       <br/>
       1.1 fixes
     ]]>
-  </change-notes>
+    </change-notes>
 
-  <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
-  <idea-version since-build="141.0"/>
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/build_number_ranges.html for description -->
+    <idea-version since-build="141.0"/>
 
-  <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
-       on how to target different products -->
-  <!-- uncomment to enable plugin in all products
-  <depends>com.intellij.modules.lang</depends>
-  -->
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html on how to target different products -->
+    <!-- uncomment to enable plugin in all products
+        <depends>com.intellij.modules.lang</depends>
+    -->
 
-  <extensions defaultExtensionNs="com.intellij">
-    <!-- Add your extensions here -->
-  </extensions>
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Add your extensions here -->
+    </extensions>
 
-  <depends>org.jetbrains.java.decompiler</depends>
-
-  <actions>
-    <!-- The <action> element defines an action to register.
-               The mandatory "id" attribute specifies an unique identifier for the action.
-               The mandatory "class" attribute specifies the full-qualified name of the class implementing the action.
-               The mandatory "text" attribute specifies the text of the action (tooltip for toolbar button or text for menu item).
-              The optional "use-shortcut-of" attribute specifies the ID of the action whose keyboard shortcut this action will use.
-              The optional "description" attribute specifies the text which is displayed in the status bar when the action is focused.
-               The optional "icon" attribute specifies the icon which is displayed on the toolbar button or next to the menu item. -->
-    <action id="DecompileAndAttach" class="io.gulp.intellij.plugin.decompile.DecompileAndAttachAction"
-            text="Decompile And Attach">
-      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
-    </action>
-  </actions>
+    <actions>
+        <!--
+            The <action> element defines an action to register.
+            The mandatory "id" attribute specifies an unique identifier for the action.
+            The mandatory "class" attribute specifies the full-qualified name of the class implementing the action.
+            The mandatory "class" attribute specifies the full-qualified name of the class implementing the action.
+            The mandatory "text" attribute specifies the text of the action (tooltip for toolbar button or text for menu item).
+            The optional "use-shortcut-of" attribute specifies the ID of the action whose keyboard shortcut this action will use.
+            The optional "description" attribute specifies the text which is displayed in the status bar when the action is focused.
+            The optional "icon" attribute specifies the icon which is displayed on the toolbar button or next to the menu item.
+        -->
+        <action id="DecompileAndAttach" class="io.gulp.intellij.plugin.decompile.DecompileAndAttachAction"
+                text="Decompile And Attach">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 
 </idea-plugin>

@@ -1,24 +1,6 @@
 package io.gulp.intellij.plugin.decompile;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-import static com.intellij.notification.NotificationType.*;
-
-import java.io.*;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.jar.JarOutputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
-
 import com.google.common.base.Strings;
-import org.apache.commons.codec.Charsets;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.java.decompiler.IdeaDecompiler;
-
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
 import com.intellij.ide.util.PropertiesComponent;
@@ -44,7 +26,24 @@ import com.intellij.openapi.vfs.JarFileSystem;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.compiled.ClassFileDecompilers;
+import com.intellij.psi.impl.compiled.ClassFileDecompiler;
 import com.intellij.util.CommonProcessors;
+import org.apache.commons.codec.Charsets;
+import org.jetbrains.annotations.NotNull;
+
+import java.io.*;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.jar.JarOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+import static com.intellij.notification.NotificationType.*;
 
 /**
  * Created by bduisenov on 12/11/15.
@@ -55,8 +54,49 @@ public class DecompileAndAttachAction extends AnAction {
 
     private final String baseDirProjectSettingsKey = "io.gulp.intellij.baseDir";
 
+    private static JarOutputStream createJarOutputStream(File jarFile) throws IOException {
+        BufferedOutputStream outputStream = new BufferedOutputStream(new FileOutputStream(jarFile));
+        return new JarOutputStream(outputStream);
+    }
+
+    private static void addDirectoryEntry(ZipOutputStream output, String relativePath, Set<String> writtenPaths)
+            throws IOException {
+        if (!writtenPaths.add(relativePath))
+            return;
+
+        ZipEntry e = new ZipEntry(relativePath);
+        e.setMethod(ZipEntry.STORED);
+        e.setSize(0);
+        e.setCrc(0);
+        output.putNextEntry(e);
+        output.closeEntry();
+    }
+
+    private static void addFileEntry(ZipOutputStream jarOS, String relativePath, Set<String> writtenPaths,
+                                     CharSequence decompiled) throws IOException {
+        if (!writtenPaths.add(relativePath))
+            return;
+
+        ByteArrayInputStream fileIS = new ByteArrayInputStream(decompiled.toString().getBytes(Charsets.toCharset("UTF-8")));
+        long size = decompiled.length();
+        ZipEntry e = new ZipEntry(relativePath);
+        if (size == 0) {
+            e.setMethod(ZipEntry.STORED);
+            e.setSize(0);
+            e.setCrc(0);
+        }
+        jarOS.putNextEntry(e);
+        try {
+            FileUtil.copy(fileIS, jarOS);
+        } finally {
+            fileIS.close();
+        }
+        jarOS.closeEntry();
+    }
+
     /**
      * show 'decompile and attach' option only for *.jar files
+     *
      * @param e
      */
     @Override
@@ -90,7 +130,7 @@ public class DecompileAndAttachAction extends AnAction {
         new Task.Backgroundable(project, "Decompiling...", true) {
 
             private String lineMappingKey = "decompiler.use.line.mapping";
-            private String lineTableKey = "decompiler.use.line.table";
+            private String lineTableKey = "decompiler.dump.original.lines";
             private boolean initialLineMappingSetting;
             private boolean initialLineTableSetting;
 
@@ -141,7 +181,10 @@ public class DecompileAndAttachAction extends AnAction {
 
     private void process(Project project, String baseDirPath, VirtualFile sourceVF, ProgressIndicator indicator, double fractionStep) {
         indicator.setText("Decompiling '" + sourceVF.getName() + "'");
-        VirtualFile jarRoot = JarFileSystem.getInstance().getJarRootForLocalFile(sourceVF);
+        JarFileSystem jfs = JarFileSystem.getInstance();
+        VirtualFile jarRoot = jfs.getJarRootForLocalFile(sourceVF);
+        if (jarRoot == null)
+            jarRoot = jfs.getJarRootForLocalFile(jfs.getLocalVirtualFileFor(sourceVF));
         try {
             File tmpJarFile = FileUtil.createTempFile("decompiled", "tmp");
             Pair<String, Set<String>> result;
@@ -183,8 +226,7 @@ public class DecompileAndAttachAction extends AnAction {
             VirtualFile resultJarVF = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(resultJar);
             checkNotNull(resultJarVF, "could not find Virtual File of %s", resultJar.getAbsolutePath());
             VirtualFile resultJarRoot = JarFileSystem.getInstance().getJarRootForLocalFile(resultJarVF);
-            VirtualFile[] roots = PathUIUtils.scanAndSelectDetectedJavaSourceRoots(null,
-                    new VirtualFile[] {resultJarRoot});
+            VirtualFile[] roots = PathUIUtils.scanAndSelectDetectedJavaSourceRoots(null, new VirtualFile[]{resultJarRoot});
             new WriteCommandAction<Void>(project) {
 
                 @Override
@@ -205,7 +247,7 @@ public class DecompileAndAttachAction extends AnAction {
                             INFORMATION).notify(project);
                 }
             }.execute();
-        } , ModalityState.NON_MODAL);
+        }, ModalityState.NON_MODAL);
     }
 
     private Optional<Library> findModuleDependency(Module module, VirtualFile sourceVF) {
@@ -230,6 +272,7 @@ public class DecompileAndAttachAction extends AnAction {
      * recursively goes through jar archive and decompiles all found classes.
      * in case if decompilation fails on a class, the class name is put to {@code failed} Set
      * and then is returned with result.
+     *
      * @param jarOutputStream
      * @return {@code Pair<String, Set<String>>} containing the filename of a library and a set of
      * class names which failed to decompile
@@ -239,7 +282,8 @@ public class DecompileAndAttachAction extends AnAction {
 
             private String initialIndicatorText;
 
-            private IdeaDecompiler decompiler = new IdeaDecompiler();
+            // private IdeaDecompiler decompiler = new IdeaDecompiler();
+            private ClassFileDecompiler decompiler = new ClassFileDecompiler();
 
             private Set<String> failed = new HashSet<>();
 
@@ -285,53 +329,13 @@ public class DecompileAndAttachAction extends AnAction {
             private void decompileAndSave(String relativeFilePath, VirtualFile file, Set<String> writternPaths)
                     throws IOException {
                 try {
-                    CharSequence decompiled = decompiler.getText(file);
+                    CharSequence decompiled = decompiler.decompile(file);
                     addFileEntry(jarOutputStream, relativeFilePath, writternPaths, decompiled);
                 } catch (ClassFileDecompilers.Light.CannotDecompileException e) {
                     failed.add(file.getName());
                 }
             }
         };
-    }
-
-    private static JarOutputStream createJarOutputStream(File jarFile) throws IOException {
-        BufferedOutputStream outputStream = new BufferedOutputStream(new FileOutputStream(jarFile));
-        return new JarOutputStream(outputStream);
-    }
-
-    private static void addDirectoryEntry(ZipOutputStream output, String relativePath, Set<String> writtenPaths)
-            throws IOException {
-        if (!writtenPaths.add(relativePath))
-            return;
-
-        ZipEntry e = new ZipEntry(relativePath);
-        e.setMethod(ZipEntry.STORED);
-        e.setSize(0);
-        e.setCrc(0);
-        output.putNextEntry(e);
-        output.closeEntry();
-    }
-
-    private static void addFileEntry(ZipOutputStream jarOS, String relativePath, Set<String> writtenPaths,
-            CharSequence decompiled) throws IOException {
-        if (!writtenPaths.add(relativePath))
-            return;
-
-        ByteArrayInputStream fileIS = new ByteArrayInputStream(decompiled.toString().getBytes(Charsets.toCharset("UTF-8")));
-        long size = decompiled.length();
-        ZipEntry e = new ZipEntry(relativePath);
-        if (size == 0) {
-            e.setMethod(ZipEntry.STORED);
-            e.setSize(0);
-            e.setCrc(0);
-        }
-        jarOS.putNextEntry(e);
-        try {
-            FileUtil.copy(fileIS, jarOS);
-        } finally {
-            fileIS.close();
-        }
-        jarOS.closeEntry();
     }
 
 }
